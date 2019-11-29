@@ -1,20 +1,30 @@
-export class Request<R, A> {
-  constructor(public readonly request: R, public readonly perform: (r: R) => A) {}
-
-  map <B> (f: (a: A) => B): Request<R, B> {
-    return new Request(this.request, r => f(this.perform(r)))
-  }
+export class Request<R, B, C> {
+  constructor(public readonly request: R, public readonly perform: (b: B) => C) {}
 }
 
-export const createRequest = <R>(r: R): Request<R, R> =>
-  new Request(r, r => r)
+export const map = <R, B, C, D> (f: (c: C) => D, r: Request<R, B, C>): Request<R, B, D> =>
+  new Request(r.request, b => f(r.perform(b)))
 
-export const performRequest = <R, A> (r: Request<R, A>): A =>
+export const lmap = <R, A, B, C> (f: (a: A) => B, r: Request<R, B, C>): Request<R, A, C> =>
+  new Request(r.request, b => r.perform(f(b)))
+
+export const createRequest = <R, A>(r: R): Request<R, A, A> =>
+  new Request(r, a => a)
+
+export const performRequest = <R, B> (r: Request<R, R, B>): B =>
   r.perform(r.request)
 
-type Zip<R extends readonly Request<any, any>[]> = {
-  [K in keyof R]: R[K] extends Request<any, infer A> ? A : never
+export type ZipRequests<R extends readonly Request<any, any, any>[]> = {
+  [K in keyof R]: R[K] extends Request<infer A, any, any> ? A : never
 }
 
-export const zip = <Requests extends readonly Request<any, any>[], C>(f: (...args: Zip<Requests>) => C, ...requests: Requests): Request<typeof f, C> =>
-  new Request(f, f => f(...requests.map(r => r.perform(r.request)) as any))
+export type ZipArgs<R extends readonly Request<any, any, any>[]> = {
+  [K in keyof R]: R[K] extends Request<any, infer A, any> ? A : never
+}
+
+export type ZipReturns<R extends readonly Request<any, any, any>[]> = {
+  [K in keyof R]: R[K] extends Request<any, any, infer A> ? A : never
+}
+
+export const zip = <Requests extends readonly Request<any, any, any>[]>(...requests: Requests): Request<ZipRequests<Requests>, ZipArgs<Requests>, ZipReturns<Requests>> =>
+  new Request(requests.map(r => r.request) as any, inputs => requests.map((r, i) => r.perform(inputs[i])) as any)
