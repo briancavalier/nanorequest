@@ -1,30 +1,40 @@
-export class Request<R, B, C> {
-  constructor(public readonly request: R, public readonly perform: (b: B) => C) {}
+export type Request<R, S, T, A> = {
+  readonly request: R,
+  readonly perform: (r: R) => S,
+  readonly handle: (t: T) => A
 }
 
-export const map = <R, B, C, D> (f: (c: C) => D, r: Request<R, B, C>): Request<R, B, D> =>
-  new Request(r.request, b => f(r.perform(b)))
+export const map = <R, S, T, A, B> (f: (a: A) => B, { request, perform, handle }: Request<R, S, T, A>): Request<R, S, T, B> =>
+  ({ request, perform, handle: t => f(handle(t)) })
 
-export const lmap = <R, A, B, C> (f: (a: A) => B, r: Request<R, B, C>): Request<R, A, C> =>
-  new Request(r.request, b => r.perform(f(b)))
+export const using = <R, S, T, U, A> (f: (s: S) => T, { request, perform, handle }: Request<R, S, U, A>): Request<R, T, U, A> =>
+  ({ request, perform: r => f(perform(r)), handle })
 
-export const createRequest = <R, A>(r: R): Request<R, A, A> =>
-  new Request(r, a => a)
+export const createRequest = <R, A>(request: R): Request<R, R, A, A> =>
+  ({ request, perform: r => r, handle: a => a })
 
-export const performRequest = <R, B> (r: Request<R, R, B>): B =>
-  r.perform(r.request)
+export const performRequest = <R, S, A> ({ request, perform, handle }: Request<R, S, S, A>): A =>
+  handle(perform(request))
 
-export type ZipRequests<R extends readonly Request<any, any, any>[]> = {
-  [K in keyof R]: R[K] extends Request<infer A, any, any> ? A : never
+export type ZipR<R extends readonly Request<any, any, any, any>[]> = {
+  readonly [K in keyof R]: R[K] extends Request<infer R, any, any, any> ? R : never
 }
 
-export type ZipArgs<R extends readonly Request<any, any, any>[]> = {
-  [K in keyof R]: R[K] extends Request<any, infer A, any> ? A : never
+export type ZipS<R extends readonly Request<any, any, any, any>[]> = {
+  readonly [K in keyof R]: R[K] extends Request<any, infer S, any, any> ? S : never
 }
 
-export type ZipReturns<R extends readonly Request<any, any, any>[]> = {
-  [K in keyof R]: R[K] extends Request<any, any, infer A> ? A : never
+export type ZipT<R extends readonly Request<any, any, any, any>[]> = {
+  readonly [K in keyof R]: R[K] extends Request<any, any, infer T, any> ? T : never
 }
 
-export const zip = <Requests extends readonly Request<any, any, any>[]>(...requests: Requests): Request<ZipRequests<Requests>, ZipArgs<Requests>, ZipReturns<Requests>> =>
-  new Request(requests.map(r => r.request) as any, inputs => requests.map((r, i) => r.perform(inputs[i])) as any)
+export type ZipA<R extends readonly Request<any, any, any, any>[]> = {
+  readonly [K in keyof R]: R[K] extends Request<any, any, any, infer A> ? A : never
+}
+
+export const zip = <Requests extends readonly Request<any, any, any, any>[]>(...requests: Requests): Request<ZipR<Requests>, ZipS<Requests>, ZipT<Requests>, ZipA<Requests>> =>
+  ({
+    request: requests.map(r => r.request) as any,
+    perform: (rs: ZipR<Requests>): ZipS<Requests> => requests.map((r, i) => r.perform(rs[i])) as any,
+    handle: (ts: ZipT<Requests>): ZipA<Requests> => requests.map((r, i) => r.handle(ts[i])) as any
+  })
